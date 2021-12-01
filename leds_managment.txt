@@ -1,0 +1,79 @@
+#include "leds_managment.h"
+
+bool leds_strombo = true;  // flip-flap variable
+
+
+void init_leds(Adafruit_NeoPixel pixels) {
+#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+
+  pixels.begin();
+}
+
+void update_leds(Adafruit_NeoPixel pixels, uint32_t color, int percentage) {
+  pixels.clear();
+
+  if(percentage == 100){
+    for(int i=0; i<pixels.numPixels(); i++) {
+      pixels.setPixelColor(i, color);
+    }
+  } else {
+      
+    /*
+    // fixed groups
+    int group_number = 10;
+    int group_size = NUMPIXELS/group_number;
+    int nb_leds_on_per_group = group_size*percentage/100;
+
+    for(int j=0; j<group_number; j++) {
+      for(int i=0; i<group_size; i++) {
+        if(i<nb_leds_on_per_group) {
+          pixels.setPixelColor(j*group_size + i, color);
+        } else {
+          pixels.setPixelColor(j*group_size + i, 0, 0, 0);
+        }
+      }
+    }
+    */
+
+    for(int i=0; i<pixels.numPixels(); i++) {
+      if(random(100) < percentage) {
+        pixels.setPixelColor(i, color);
+      } else {
+        pixels.setPixelColor(i, 0, 0, 0);
+      }
+    }
+  }
+
+  pixels.show();
+}
+
+void level_on_leds(Adafruit_NeoPixel pixels, int level) {
+  pixels.clear();
+
+  for(int i=0; i<level; i++) {
+    pixels.setPixelColor(i, 255, 0, 0);
+  }
+
+  pixels.show();
+}
+
+uint32_t update_strombo(Adafruit_NeoPixel pixels, int strombo_period, uint32_t color) {
+  int potar_1 = analogRead(A0); // valeur entre 0 et 1023  
+  uint32_t pixelHue = potar_1 * 65536L / 1023;
+
+  uint32_t new_color;
+
+  if (leds_strombo){
+    delay(strombo_period);
+    new_color = color;
+  } else {
+    delay(10);
+    new_color = pixels.Color(0, 0, 0);
+  }
+  leds_strombo = not(leds_strombo);
+
+  return(new_color);
+}
+
