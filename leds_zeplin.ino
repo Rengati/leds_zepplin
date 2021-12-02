@@ -6,10 +6,10 @@
 #define ANALOG_UP   1000
 #define ANALOG_DOWN 10
 
-#define MICROPHONE_SAMPLING_PERIOD  1
+#define MICROPHONE_SAMPLING_PERIOD  20
 #define AMBIANT_NOISE_TIME_CONSTANT 5000
 
-#define CLAP_THRESHOLD        80
+#define CLAP_THRESHOLD        150
 #define CLAP_TOLERANCE        5
 
 bool CLAP_SEQUENCE[7] = {0, 1, 0, 1, 0, 1, 0};
@@ -22,7 +22,7 @@ unsigned long last_ambient_noise_update_time = 0;
 float noise_local_max = 0;
 unsigned long last_noise_local_max_update_time = 0;
 
-#define NOISE_RECORD_LIST_SIZE   10
+#define NOISE_RECORD_LIST_SIZE   5
 int noise_record_list[NOISE_RECORD_LIST_SIZE] = {0};
 int noise_record_list_index = 0;
 
@@ -36,6 +36,7 @@ bool leds_strombo = true;  // flip-flap variable
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Starting");
 
   pinMode(A0, INPUT);  // color potentiometer
   pinMode(A1, INPUT);  // frequence potentiometer
@@ -43,18 +44,21 @@ void setup() {
   pinMode(LEDS_PIN, OUTPUT);
 
   pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  Serial.println("Initialized");
 }
 
 void loop() {
+  //Serial.println("Reading INPUT values");
   uint32_t color = read_color();
   int strombo_period = read_strombo_period();
 
-  test_noise_level(MICROPHONE_PIN, 20);
-
+  //Serial.println("Reading Microphone level");
+  //test_noise_level(MICROPHONE_PIN, 20);
+  
   if(strombo_period == 0){ // strombo and detect clap cannot cohabitate
-    //if(detect_clap(MICROPHONE_PIN)){
-    //  leds_on = not(leds_on);
-    //}
+    if(detect_clap(MICROPHONE_PIN)){
+      leds_on = not(leds_on);
+    }
     leds_on = true;
 
     if(leds_on){
@@ -156,6 +160,7 @@ uint32_t update_strombo(int strombo_period, uint32_t color) {
   return(new_color);
 }
 
+
 // MICROPHONE
 float read_noise_level(const uint8_t microphone_pin){
   return(read_noise_level(microphone_pin, MICROPHONE_SAMPLING_PERIOD));
@@ -167,10 +172,7 @@ float read_noise_level(const uint8_t microphone_pin, const int sampling_period) 
 }
 
 float test_noise_level(const uint8_t microphone_pin, const int sampling_period) {
-# define samples_number 500
-  int sample_list[samples_number] = {0};
-  float ambient_list[samples_number] = {0};
-  int local_max_list[samples_number] = {0};
+  int samples_number = 1000;
 
   Serial.println("- 3 -");
   delay(1000);
@@ -186,37 +188,35 @@ float test_noise_level(const uint8_t microphone_pin, const int sampling_period) 
     unsigned long current_time = millis();
     float ambient = update_ambient_noise(signal_micro, current_time);
     int local_max = update_noise_local_max(signal_micro, current_time);
+    
+    Serial.print(String(current_time));
+    Serial.print(", ");
+    Serial.print(String(signal_micro));
+    Serial.print(", ");
+    Serial.print(String(ambient_noise));
+    Serial.print(", ");
+    Serial.println(String(local_max));
 
-    sample_list[i] = signal_micro;
-    ambient_list[i] = ambient;
-    local_max_list[i] = local_max;
-
-    //Serial.println(noise_record_list_index);
     delay(sampling_period);
   }
 
-  Serial.println(samples_number);
-
-  for (int i=0; i<samples_number; i++) {
-    Serial.print(String(sample_list[i]));
-    Serial.print(", ");
-    Serial.print(String(ambient_list[i]));
-    Serial.print(", ");
-    Serial.println(String(local_max_list[i]));
-  }
   Serial.println("#######################################");
   delay(200000);
 
   return(0);
 }
 
-/*
-bool detect_clap(const uint8_t microphone_pin) {
-  float noise_level = read_noise_level(microphone_pin);
-  update_ambient_noise(noise_level);
 
-  bool clap_detected = (noise_level - ambient_noise > CLAP_THRESHOLD);
+bool detect_clap(const uint8_t microphone_pin) {
+  int signal_micro = analogRead(microphone_pin);
+
+  unsigned long current_time = millis();
+  float ambient = update_ambient_noise(signal_micro, current_time);
+  int local_max = update_noise_local_max(signal_micro, current_time);
+
+  bool clap_detected = (signal_micro - ambient > CLAP_THRESHOLD);
   
+  /*
   if(CLAP_SEQUENCE[current_index_in_clap_sequence + 1] == clap_detected) {
     current_index_in_clap_sequence += 1;
   } else {
@@ -228,8 +228,19 @@ bool detect_clap(const uint8_t microphone_pin) {
       current_tolerance = CLAP_TOLERANCE;
     }
   }
+  */
 
-  //Serial.println("ambient : " + String(ambient_noise) + " | current : " + String(noise_level) + " | index : " + String(current_index_in_clap_sequence));
+  Serial.print(String(current_time));
+  Serial.print(", ");
+  Serial.print(String(signal_micro));
+  Serial.print(", ");
+  Serial.print(String(ambient_noise));
+  Serial.print(", ");
+  Serial.print(String(local_max));
+  Serial.print(", ");
+  Serial.println(String(int(clap_detected)));
+
+  delay(MICROPHONE_SAMPLING_PERIOD);
 
   if(current_index_in_clap_sequence == (sizeof(CLAP_SEQUENCE)/sizeof(CLAP_SEQUENCE[0])) - 1){
     // all the sequence has been done
@@ -239,7 +250,7 @@ bool detect_clap(const uint8_t microphone_pin) {
   }
   return(false);
 }
-*/
+
 
 float update_ambient_noise(const float noise_level, unsigned long current_time) {
   int dt = current_time - last_ambient_noise_update_time;
@@ -253,13 +264,13 @@ float update_ambient_noise(const float noise_level, unsigned long current_time) 
 int update_noise_local_max(const float noise_level, unsigned long current_time) {
   int dt = current_time - last_noise_local_max_update_time;
 
+  noise_record_list[noise_record_list_index] = noise_level;
+  noise_record_list_index = (noise_record_list_index + 1) % NOISE_RECORD_LIST_SIZE;
+
   noise_local_max = noise_record_list[0];
   for (int i = 0; i < (sizeof(noise_record_list) / sizeof(noise_record_list[0])); i++) {
     noise_local_max = max(noise_record_list[i], noise_local_max);
   }
-
-  noise_record_list[noise_record_list_index] = noise_level;
-  noise_record_list_index = (noise_record_list_index + 1) % NOISE_RECORD_LIST_SIZE;
 
   last_noise_local_max_update_time = current_time;
   return noise_local_max;
