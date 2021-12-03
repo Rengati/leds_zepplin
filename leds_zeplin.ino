@@ -9,11 +9,14 @@
 #define MICROPHONE_SAMPLING_PERIOD  20
 #define AMBIANT_NOISE_TIME_CONSTANT 5000
 
-#define CLAP_THRESHOLD        150
+#define CLAP_LOW_THRESHOLD       100
+#define CLAP_UP_THRESHOLD        150
 #define CLAP_TOLERANCE        5
 
 bool CLAP_SEQUENCE[7] = {0, 1, 0, 1, 0, 1, 0};
 int current_index_in_clap_sequence = 0;
+bool current_clap_state = 0;
+unsigned long last_clap_state_change_time = 0;
 int current_tolerance = CLAP_TOLERANCE;
 
 float ambient_noise = 0;
@@ -208,16 +211,38 @@ float test_noise_level(const uint8_t microphone_pin, const int sampling_period) 
 
 
 bool detect_clap(const uint8_t microphone_pin) {
+  delay(MICROPHONE_SAMPLING_PERIOD);
   int signal_micro = analogRead(microphone_pin);
 
   unsigned long current_time = millis();
   float ambient = update_ambient_noise(signal_micro, current_time);
   int local_max = update_noise_local_max(signal_micro, current_time);
 
-  bool clap_detected = (signal_micro - ambient > CLAP_THRESHOLD);
+  Serial.print(String(current_time));
+  Serial.print(", ");
+  Serial.print(String(signal_micro));
+  Serial.print(", ");
+  Serial.print(String(ambient_noise));
+  Serial.print(", ");
+  Serial.print(String(local_max));
+  Serial.print(", ");
+  Serial.println(String(int(current_clap_state)));
   
+  // comparateur à histeresys
+  if (current_clap_state == 0 and (local_max - ambient > CLAP_UP_THRESHOLD)) {
+    current_clap_state = 1;
+  } else if (current_clap_state == 1 and (local_max - ambient < CLAP_LOW_THRESHOLD)) {
+    current_clap_state = 0;
+  } else {
+    return(false);
+  }
+
+  // vérification que le temps à l'état haut est respecté
+  // ....
+  last_clap_state_change_time = millis();
+
   /*
-  if(CLAP_SEQUENCE[current_index_in_clap_sequence + 1] == clap_detected) {
+  if((CLAP_SEQUENCE[current_index_in_clap_sequence + 1] == current_clap_state)) {
     current_index_in_clap_sequence += 1;
   } else {
     if(current_tolerance > 0) {
@@ -228,19 +253,6 @@ bool detect_clap(const uint8_t microphone_pin) {
       current_tolerance = CLAP_TOLERANCE;
     }
   }
-  */
-
-  Serial.print(String(current_time));
-  Serial.print(", ");
-  Serial.print(String(signal_micro));
-  Serial.print(", ");
-  Serial.print(String(ambient_noise));
-  Serial.print(", ");
-  Serial.print(String(local_max));
-  Serial.print(", ");
-  Serial.println(String(int(clap_detected)));
-
-  delay(MICROPHONE_SAMPLING_PERIOD);
 
   if(current_index_in_clap_sequence == (sizeof(CLAP_SEQUENCE)/sizeof(CLAP_SEQUENCE[0])) - 1){
     // all the sequence has been done
@@ -248,6 +260,7 @@ bool detect_clap(const uint8_t microphone_pin) {
     current_tolerance = CLAP_TOLERANCE;
     return(true);
   }
+  */
   return(false);
 }
 
